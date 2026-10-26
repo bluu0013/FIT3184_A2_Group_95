@@ -71,7 +71,7 @@ Change a contract in a PR that all three review.
 | From | To | What |
 |---|---|---|
 | A | B, C | Deployed stack and outputs (API URL, pool and client IDs). Target: within 3 days |
-| A | B | `INFERENCE_API_KEY` and the Cognito pool/client IDs for the Cloud Run auth |
+| A | B | The shared key (set as `INFERENCE_API_KEY` on Cloud Run) and the Cognito pool/client IDs for the Cloud Run auth |
 | B | A | Cloud Run URL and a working `/detect` |
 | C | B | Stable search, manage and chat routes (or agreed mock responses) |
 | A, C | each other | `ecoguard_common` and DynamoDB fields. Both review any change |
@@ -98,8 +98,16 @@ python -m unittest discover -s tests -v
    sam build --use-container
    sam deploy --guided
    ```
-   Parameters you will be asked for: `CognitoDomainPrefix` (globally unique), `InferenceUrl`,
-   `InferenceApiKey`, `LabRoleArn` (Academy only, leave empty otherwise), `FrontendOrigin`.
+   Parameters you will be asked for: `CognitoDomainPrefix` (globally unique; letters, digits and
+   hyphens only, not an ARN), `InferenceUrl`, `LabRoleArn` (Academy only, leave empty otherwise),
+   `FrontendOrigin`, `InferenceApiKeyParam` (keep the default).
+
+   The shared key lives in SSM Parameter Store, not in the stack. Create it once before the first
+   deploy (or any time before ingest runs) and give the same value to Cloud Run:
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   aws ssm put-parameter --name /ecoguard/inference-api-key --type SecureString --value "<the key>" --region <aws-region>
+   ```
 3. **Frontend:** copy the stack outputs into `frontend/js/config.js`, then
    ```bash
    cd frontend
@@ -122,7 +130,7 @@ deployment and will have small fixes.
 Known gaps to close (also tracked in the team board):
 
 - [ ] Choose and verify a model that actually detects fox, feral pig, cane toad, rabbit (see decisions, ADR 5).
-- [ ] Replace the `InferenceApiKey` stack parameter with an SSM/Secret Manager lookup.
+- [x] Shared inference key is read from SSM Parameter Store at runtime (no key in the stack or in git).
 - [ ] Least-privilege IAM review (rubric 1.3). On Academy the `LabRole` is used instead.
 - [ ] Lost-pet matching beyond species plus manual tags (colour, breed).
 - [ ] Frontend polish: error states, loading states, responsive gallery.

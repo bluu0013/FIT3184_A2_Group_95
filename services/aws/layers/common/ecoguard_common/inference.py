@@ -9,11 +9,39 @@ class InferenceError(ConnectionError):
     """Raised when the inference service cannot be reached or returns an error."""
 
 
+_key_cache = None
+
+
+def _api_key():
+    """Shared key for calls with no user token: SSM SecureString named by INFERENCE_API_KEY_PARAM.
+
+    INFERENCE_API_KEY is only a local-development override. The SSM value is cached per container.
+    """
+    global _key_cache
+    if _key_cache is None:
+        direct = os.environ.get("INFERENCE_API_KEY")
+        param = os.environ.get("INFERENCE_API_KEY_PARAM")
+        if direct:
+            _key_cache = direct
+        elif param:
+            import boto3
+
+            try:
+                _key_cache = boto3.client("ssm").get_parameter(Name=param, WithDecryption=True)[
+                    "Parameter"
+                ]["Value"]
+            except Exception as exc:  # missing parameter or no permission
+                raise InferenceError(f"cannot read API key from SSM parameter {param}") from exc
+        else:
+            _key_cache = ""
+    return _key_cache
+
+
 def detect(*, url=None, image_base64=None, media_type="image", token=None, timeout=25):
     """Call POST /detect.
 
     token: the caller's Cognito token to forward (user-initiated requests). When None the shared
-    X-Api-Key from the environment is used (S3-triggered ingest has no user token).
+    X-Api-Key from SSM is used (S3-triggered ingest has no user token).
     timeout: keep under 30 s for API Gateway paths; ingest may pass a larger value.
     """
     base = os.environ.get("INFERENCE_URL", "").rstrip("/")
@@ -31,8 +59,10 @@ def detect(*, url=None, image_base64=None, media_type="image", token=None, timeo
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token
-    elif os.environ.get("INFERENCE_API_KEY"):
-        headers["X-Api-Key"] = os.environ["INFERENCE_API_KEY"]
+    else:
+        key = _api_key()
+        if key:
+            headers["X-Api-Key"] = key
 
     request = urllib.request.Request(
         base + "/detect", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST"

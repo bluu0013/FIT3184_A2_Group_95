@@ -14,11 +14,10 @@ Parameters:
     Type: String
     Default: ""
     Description: Cloud Run URL of the inference service (no trailing slash).
-  InferenceApiKey:
+  InferenceApiKeyParam:
     Type: String
-    NoEcho: true
-    Default: ""
-    Description: Shared key for S3-triggered ingest calls to Cloud Run. TODO move to SSM Parameter Store.
+    Default: /ecoguard/inference-api-key
+    Description: Name of the SSM SecureString holding the shared key for S3-triggered ingest calls to Cloud Run. Create it with aws ssm put-parameter (see README); the key itself never goes in the stack.
   CognitoDomainPrefix:
     Type: String
     Description: Globally unique prefix for the Cognito hosted UI, e.g. ecoguard-team07
@@ -52,7 +51,7 @@ Globals:
         MEDIA_BUCKET: !Ref MediaBucket
         ALERTS_TOPIC_ARN: !Ref AlertsTopic
         INFERENCE_URL: !Ref InferenceUrl
-        INFERENCE_API_KEY: !Ref InferenceApiKey
+        INFERENCE_API_KEY_PARAM: !Ref InferenceApiKeyParam
         LEX_BOT_ID: !Ref LexBotId
         LEX_BOT_ALIAS_ID: !Ref LexBotAliasId
 
@@ -249,6 +248,9 @@ Resources:
             - Effect: Allow
               Action: sns:Publish
               Resource: !Ref AlertsTopic
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${InferenceApiKeyParam}"
       Events:
         Uploaded:
           Type: EventBridgeRule

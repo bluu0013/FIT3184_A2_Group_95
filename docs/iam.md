@@ -9,7 +9,7 @@ each function is *designed* to need, and what the template grants when it can.
 |---|---|---|---|
 | `upload_init` | `PutObject`, `GetObject` on `media/*` (signs the presigned PUT and the duplicate GET) | `PutItem`, `GetItem` | |
 | `thumbnail` | `GetObject` on `media/*`, `PutObject` on `thumbs/*` | `GetItem`, `UpdateItem` | |
-| `ingest` | `GetObject`, `DeleteObject` on `media/*` (hash check, presigned GET for Cloud Run, reject on mismatch) | `GetItem`, `UpdateItem` | `sns:Publish` on the alerts topic |
+| `ingest` | `GetObject`, `DeleteObject` on `media/*` (hash check, presigned GET for Cloud Run, reject on mismatch) | `GetItem`, `UpdateItem` | `sns:Publish` on the alerts topic, `ssm:GetParameter` on the one inference-key parameter |
 | `subscriptions` | | | `sns:Subscribe` on the alerts topic |
 | `chat` | | | `lex:RecognizeText` on the one bot alias (`LexBotId`/`LexBotAliasId`) |
 | `search`, `lex_fulfilment` | read the bucket (SAM `S3ReadPolicy`) | read the table (SAM `DynamoDBReadPolicy`) | |
@@ -21,6 +21,7 @@ Notes
   the bucket, which is not an IAM policy.
 - Nothing grants `s3:*`, `dynamodb:*` or `Resource: "*"`.
 - Cloud Run is called with a Cognito token (user requests) or the shared `X-Api-Key` (S3-triggered
-  ingest). The key is a stack parameter, never committed. Cognito pool and client IDs are not secrets.
+  ingest). The key is an SSM SecureString read by `ingest` at runtime, so it is not in the template,
+  the stack parameters, the Lambda environment or git. Cognito pool and client IDs are not secrets.
 - The API Gateway authorizer is the HTTP API JWT authorizer, set as the default so every route
   requires a valid Cognito token.

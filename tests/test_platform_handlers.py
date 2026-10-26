@@ -214,5 +214,52 @@ class NotifyTests(unittest.TestCase):
         client.publish.assert_not_called()
 
 
+class InferenceKeyTests(unittest.TestCase):
+    def setUp(self):
+        inference._key_cache = None
+        self.addCleanup(setattr, inference, "_key_cache", None)
+
+    def _env(self, **env):
+        base = {"INFERENCE_API_KEY": "", "INFERENCE_API_KEY_PARAM": ""}
+        return mock.patch.dict("os.environ", {**base, **env})
+
+    def test_key_comes_from_ssm_once_and_is_cached(self):
+        ssm = mock.Mock()
+        ssm.get_parameter.return_value = {"Parameter": {"Value": "s3cret"}}
+        with self._env(INFERENCE_API_KEY_PARAM="/ecoguard/key"),                 mock.patch("boto3.client", return_value=ssm) as client:
+            self.assertEqual(inference._api_key(), "s3cret")
+            self.assertEqual(inference._api_key(), "s3cret")
+        client.assert_called_once_with("ssm")
+        ssm.get_parameter.assert_called_once_with(Name="/ecoguard/key", WithDecryption=True)
+
+    def test_local_override_skips_ssm(self):
+        with self._env(INFERENCE_API_KEY="dev-key", INFERENCE_API_KEY_PARAM="/ecoguard/key"),                 mock.patch("boto3.client") as client:
+            self.assertEqual(inference._api_key(), "dev-key")
+        client.assert_not_called()
+
+    def test_unreadable_parameter_is_an_inference_error(self):
+        ssm = mock.Mock()
+        ssm.get_parameter.side_effect = RuntimeError("AccessDenied")
+        with self._env(INFERENCE_API_KEY_PARAM="/ecoguard/key"),                 mock.patch("boto3.client", return_value=ssm):
+            with self.assertRaises(inference.InferenceError):
+                inference._api_key()
+
+    def test_user_token_requests_never_touch_ssm(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = io_json({"counts": {}})
+        with self._env(INFERENCE_URL="https://run.example", INFERENCE_API_KEY_PARAM="/ecoguard/key"),                 mock.patch("boto3.client") as client,                 mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            inference.detect(url="https://x", token="jwt")
+        client.assert_not_called()
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "Bearer jwt")
+        self.assertIsNone(request.get_header("X-api-key"))
+
+
+def io_json(data):
+    import io
+
+    return io.StringIO(json.dumps(data))
+
+
 if __name__ == "__main__":
     unittest.main()
