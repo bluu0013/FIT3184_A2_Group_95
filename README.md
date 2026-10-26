@@ -38,7 +38,9 @@ flowchart LR
   IN --> SNS[SNS alerts]
 ```
 
-Why these choices are made and what they cost: [docs/decisions.md](docs/decisions.md).
+Why these choices are made and what they cost: [docs/decisions.md](docs/decisions.md). The full
+architecture diagram (official AWS icons, editable in draw.io) and its numbered flows are in
+[docs/architecture.md](docs/architecture.md).
 
 ## Repo layout
 
