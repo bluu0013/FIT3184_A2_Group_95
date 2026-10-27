@@ -244,6 +244,17 @@ class InferenceKeyTests(unittest.TestCase):
             with self.assertRaises(inference.InferenceError):
                 inference._api_key()
 
+    def test_rejected_key_is_dropped_so_a_rotated_key_is_picked_up(self):
+        import urllib.error
+
+        inference._key_cache = "stale"
+        rejected = urllib.error.HTTPError("https://run.example/detect", 401, "Unauthorized", {}, None)
+        with self._env(INFERENCE_URL="https://run.example"), \
+                mock.patch("urllib.request.urlopen", side_effect=rejected):
+            with self.assertRaises(inference.InferenceError):
+                inference.detect(url="https://x")
+        self.assertIsNone(inference._key_cache)
+
     def test_user_token_requests_never_touch_ssm(self):
         response = mock.MagicMock()
         response.__enter__.return_value = io_json({"counts": {}})

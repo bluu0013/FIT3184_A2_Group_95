@@ -57,12 +57,14 @@ def detect(*, url=None, image_base64=None, media_type="image", token=None, timeo
         payload["image_base64"] = image_base64
 
     headers = {"Content-Type": "application/json"}
+    used_shared_key = False
     if token:
         headers["Authorization"] = "Bearer " + token
     else:
         key = _api_key()
         if key:
             headers["X-Api-Key"] = key
+            used_shared_key = True
 
     request = urllib.request.Request(
         base + "/detect", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST"
@@ -71,6 +73,9 @@ def detect(*, url=None, image_base64=None, media_type="image", token=None, timeo
         with urllib.request.urlopen(request, timeout=timeout) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as exc:
+        global _key_cache
+        if used_shared_key and exc.code in (401, 403):
+            _key_cache = None  # the key may have been rotated in SSM: re-read it on the next call
         raise InferenceError(f"inference service returned HTTP {exc.code}") from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise InferenceError(f"inference service unreachable: {exc}") from exc
