@@ -55,8 +55,10 @@ rule and delete after use.
 
 - User-initiated calls (`/search/by-file`, `/search/lost-pet`): the user's Cognito token is forwarded
   and verified in Cloud Run against the pool's JWKS.
-- S3-triggered ingest has no user token, so it sends a shared `X-Api-Key`. Replace the stack
-  parameter with SSM Parameter Store or Secret Manager before the demo.
+- S3-triggered ingest has no user token, so it sends a shared `X-Api-Key`. The key is an SSM
+  Parameter Store SecureString (`/ecoguard/inference-api-key`), read by `ingest` and cached per
+  container. Only the parameter's name is a stack parameter, so the key is never in the template,
+  stack, Lambda environment or git. Rotating it means updating the SSM value and the Cloud Run env var.
 - Cloud Run is deployed with `--allow-unauthenticated` because the caller is Lambda, not a Google
   principal. All authorisation happens in the application layer.
 
