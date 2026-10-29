@@ -14,11 +14,10 @@ Parameters:
     Type: String
     Default: ""
     Description: Cloud Run URL of the inference service (no trailing slash).
-  InferenceApiKey:
+  InferenceApiKeyParam:
     Type: String
-    NoEcho: true
-    Default: ""
-    Description: Shared key for S3-triggered ingest calls to Cloud Run. TODO move to SSM Parameter Store.
+    Default: /ecoguard/inference-api-key
+    Description: Name of the SSM SecureString holding the shared key for S3-triggered ingest calls to Cloud Run. Create it with aws ssm put-parameter (see README); the key itself never goes in the stack.
   CognitoDomainPrefix:
     Type: String
     Description: Globally unique prefix for the Cognito hosted UI, e.g. ecoguard-team07
@@ -35,6 +34,9 @@ Parameters:
 
 Conditions:
   UseLabRole: !Not [!Equals [!Ref LabRoleArn, ""]]
+  HasLexBot: !And
+    - !Not [!Equals [!Ref LexBotId, ""]]
+    - !Not [!Equals [!Ref LexBotAliasId, ""]]
 
 Globals:
   Function:
@@ -49,7 +51,7 @@ Globals:
         MEDIA_BUCKET: !Ref MediaBucket
         ALERTS_TOPIC_ARN: !Ref AlertsTopic
         INFERENCE_URL: !Ref InferenceUrl
-        INFERENCE_API_KEY: !Ref InferenceApiKey
+        INFERENCE_API_KEY_PARAM: !Ref InferenceApiKeyParam
         LEX_BOT_ID: !Ref LexBotId
         LEX_BOT_ALIAS_ID: !Ref LexBotAliasId
 
@@ -176,11 +178,16 @@ Resources:
       CodeUri: services/aws/functions/upload_init/
       Handler: app.handler
       Role: !If [UseLabRole, !Ref LabRoleArn, !Ref "AWS::NoValue"]
+      # Least privilege (docs/iam.md). The role signs the presigned PUT and GET, so it needs both
+      # object actions, but only under media/.
       Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref MediaBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref MediaTable
+        - Statement:
+            - Effect: Allow
+              Action: [s3:PutObject, s3:GetObject]
+              Resource: !Sub "${MediaBucket.Arn}/media/*"
+            - Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:GetItem]
+              Resource: !GetAtt MediaTable.Arn
       Events:
         Init:
           Type: HttpApi
@@ -198,10 +205,16 @@ Resources:
       Timeout: 60
       Role: !If [UseLabRole, !Ref LabRoleArn, !Ref "AWS::NoValue"]
       Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref MediaBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref MediaTable
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub "${MediaBucket.Arn}/media/*"
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub "${MediaBucket.Arn}/thumbs/*"
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt MediaTable.Arn
       Events:
         Uploaded:
           Type: EventBridgeRule
@@ -225,12 +238,19 @@ Resources:
       Timeout: 600
       Role: !If [UseLabRole, !Ref LabRoleArn, !Ref "AWS::NoValue"]
       Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref MediaBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref MediaTable
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt AlertsTopic.TopicName
+        - Statement:
+            - Effect: Allow
+              Action: [s3:GetObject, s3:DeleteObject]
+              Resource: !Sub "${MediaBucket.Arn}/media/*"
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt MediaTable.Arn
+            - Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref AlertsTopic
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${InferenceApiKeyParam}"
       Events:
         Uploaded:
           Type: EventBridgeRule
@@ -317,7 +337,10 @@ Resources:
         - Statement:
             - Effect: Allow
               Action: lex:RecognizeText
-              Resource: "*"
+              Resource: !If
+                - HasLexBot
+                - !Sub "arn:${AWS::Partition}:lex:${AWS::Region}:${AWS::AccountId}:bot-alias/${LexBotId}/${LexBotAliasId}"
+                - !Sub "arn:${AWS::Partition}:lex:${AWS::Region}:${AWS::AccountId}:bot-alias/unset/unset"
       Events:
         Chat:
           Type: HttpApi

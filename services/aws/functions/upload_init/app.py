@@ -44,9 +44,12 @@ def _init(event):
     created = db.create_pending(item)
     if not created:
         existing = db.get_file(file_id)
-        if existing and existing.get("status") in ("failed", "rejected"):
+        status = (existing or {}).get("status")
+        if status in ("failed", "rejected"):
             db.put(item)  # allow a retry of a file that never became ready
             created = True
+        elif status == "pending":
+            created = True  # an earlier upload never finished; same content, so just hand out a new URL
         else:
             return {
                 "duplicate": True,
