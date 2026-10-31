@@ -8,7 +8,7 @@ export function mount(root) {
   let picker = { selected: () => [] };
 
   const loadInput = h("input", { type: "text", id: "t-load", placeholder: "Show files with tag, e.g. fox" });
-  const editInput = h("input", { type: "text", id: "t-edit", placeholder: "juvenile, ginger" });
+  const editInput = h("input", { type: "text", id: "t-edit", placeholder: "cat:10, dog:2 (sets minimum counts)" });
   const alertInput = h("input", { type: "text", id: "t-alert", placeholder: "fox, cane toad" });
 
   const guard = (fn) => async () => {

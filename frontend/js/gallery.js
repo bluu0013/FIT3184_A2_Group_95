@@ -13,9 +13,19 @@ export function renderGallery(container, results, { selectable = false } = {}) {
     return { selected: () => [] };
   }
   for (const r of results) {
-    const visual = r.thumb_url
-      ? h("img", { src: r.thumb_url, alt: Object.keys(r.tags).join(", ") || "uploaded file", loading: "lazy" })
-      : h("div", { class: "video" }, r.type === "video" ? "Video" : "Processing");
+    
+  const visual = r.thumb_url
+    ? h("img", {
+        src: r.thumb_url,
+        alt: Object.keys(r.tags).join(", ") || "uploaded file",
+        loading: "lazy"
+      })
+    : r.type === "video"
+      ? h("div", { class: "video" },
+          h("span", { class: "video-play", "aria-hidden": "true" }, "▶"),
+          h("span", {}, "Play video")
+        )
+      : h("div", { class: "video" }, "Processing");
     const link = h("a", { href: r.url, target: "_blank", rel: "noopener" }, visual);
     const chips = Object.entries(r.tags).map(([tag, n]) => h("span", { class: "chip" }, `${tag} ×${n}`));
     const card = h("div", { class: "card" }, link, h("div", { class: "meta" }, chips.length ? chips : "no tags"));
