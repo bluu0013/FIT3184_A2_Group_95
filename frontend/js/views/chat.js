@@ -4,15 +4,42 @@ import { h } from "../dom.js";
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
-/** Append text to the log, turning URLs into links without using innerHTML. */
+/** Append a chat bubble, turning URLs into clickable links. */
 function addMessage(log, text, mine) {
-  const el = h("div", { class: "msg" + (mine ? " me" : "") });
-  text.split(URL_RE).forEach((part, i) => {
-    el.append(i % 2 ? h("a", { href: part, target: "_blank", rel: "noopener" }, "open") : part);
+  const row = h("div", {
+    class: "chat-message-row" + (mine ? " user" : " bot")
   });
-  log.append(el);
+
+  const bubble = h("div", {
+    class: "chat-bubble" + (mine ? " user" : " bot")
+  });
+
+  const label = h("div", {
+    class: "chat-bubble-label"
+  }, mine ? "You" : "EcoGuard");
+
+  const body = h("div", { class: "chat-bubble-body" });
+
+  text.split(URL_RE).forEach((part, i) => {
+    if (i % 2) {
+      body.append(
+        h("a", {
+          href: part,
+          target: "_blank",
+          rel: "noopener noreferrer"
+        }, "open")
+      );
+    } else {
+      body.append(document.createTextNode(part));
+    }
+  });
+
+  bubble.append(label, body);
+  row.append(bubble);
+  log.append(row);
   log.scrollTop = log.scrollHeight;
 }
+
 
 export function mount(root) {
   const log = h("div", { class: "chat-log", "aria-live": "polite" });
